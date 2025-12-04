@@ -1,0 +1,148 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Undefined Behavior – Your Miro links</title>
+  <style>
+    :root {
+      --bg1: #1f1f1f;
+      --bg2: #3a3a3a;
+      --text: #ffffff;
+      --card: rgba(255,255,255,0.08);
+      --item: rgba(255,255,255,0.15);
+      --item-hover: rgba(255,255,255,0.3);
+      --focus: #ffdd57;
+      --accent: #00a3e0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background: linear-gradient(135deg, var(--bg1), var(--bg2));
+      color: var(--text);
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      text-align: center;
+      padding: 2.5rem 1rem 1rem;
+    }
+    header h1 {
+      font-size: 2.4rem;
+      margin: 0 0 .4rem;
+      color: var(--accent);
+    }
+    header p {
+      font-size: 1.1rem;
+      margin: 0;
+      opacity: 0.9;
+    }
+    .links-container {
+      width: 100%;
+      max-width: 720px;
+      margin: 2rem auto;
+      background: var(--card);
+      border-radius: 14px;
+      padding: 1.25rem;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+      backdrop-filter: blur(6px);
+    }
+    .link-item {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      text-decoration: none;
+      color: var(--text);
+      background: var(--item);
+      padding: 1rem 1.1rem;
+      margin: .5rem 0;
+      border-radius: 10px;
+      font-size: 1.15rem;
+      line-height: 1.3;
+      transition: background 0.2s ease, transform 0.1s ease;
+      word-break: break-word;
+    }
+    .link-item:hover {
+      background: var(--item-hover);
+      transform: translateY(-1px);
+    }
+    .link-item:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 3px;
+    }
+    .link-icon {
+      width: 22px;
+      height: 22px;
+      flex: 0 0 22px;
+      opacity: 0.9;
+    }
+    footer {
+      text-align: center;
+      padding: 1rem;
+      opacity: 0.8;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Undefined Behavior</h1>
+    <p>Your Miro links</p>
+  </header>
+
+  <div class="links-container">
+    <!-- All Boards -->
+	    <a class="link-item" href="https://miro.com/app/dashboard/space/3458764532362929926/">
+
+    
+      <svg class="link-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M14 3h7v7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M21 14v5a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+	  <span>All Boards
+</span>
+    </a>
+
+    <!-- Poker -->
+    <a class="link-item" href="https://miro.com/app/board/">
+      <svg class="link-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M14 3h7v7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M21 14v5a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>Poker</span>
+    </a>
+
+    <!-- Agreements -->
+    <a class="link-item" href="https://miro.com/app/board/uXjVID4xKAI=/?share"> <svg class="link-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M14 3h7v7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M21 14v5a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>Agreements</span>
+    </a>
+
+    <!-- Retro -->
+    <a class="link-item" href="https://miro.com/app/board/uXjVI2cDtps=/?share_link_id=410511266458" target="_blank" rel="noopener noreferrerdden="true">
+        <svg class="link-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M14 3h7v7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M21 14v5a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>Retro</span>
+    </a>
+  </div>
+
+  <footer>
+    © <span id="year"></span> Undefined Behavior
+  </footer>
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
