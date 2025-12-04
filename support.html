@@ -1,0 +1,131 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Support Magic Squad – Your resources</title>
+  <style>
+    :root {
+      --bg1: #0076CE;
+      --bg2: #00A3E0;
+      --text: #ffffff;
+      --card: rgba(255,255,255,0.12);
+      --item: rgba(0,0,0,0.28);
+      --item-hover: rgba(0,0,0,0.45);
+      --focus: #ffdd57;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background: linear-gradient(135deg, var(--bg1), var(--bg2));
+      color: var(--text);
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      text-align: center;
+      padding: 2.5rem 1rem 1rem;
+    }
+    header h1 {
+      font-size: 2.4rem;
+      margin: 0 0 .4rem;
+      letter-spacing: 0.5px;
+    }
+    header p {
+      font-size: 1.1rem;
+           margin: 0;
+    }
+    .links-container {
+      width: 100%;
+      max-width: 720px;
+      margin: 2rem auto;
+      background: var(--card);
+      border-radius: 14px;
+      padding: 1.25rem;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+      backdrop-filter: blur(6px);
+    }
+    .link-item {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      text-decoration: none;
+      color: var(--text);
+      background: var(--item);
+      padding: 1rem 1.1rem;
+      margin: .5rem 0;
+      border-radius: 10px;
+      font-size: 1.15rem;
+      line-height: 1.3;
+      transition: background 0.2s ease, transform 0.1s ease;
+      word-break: break-word;
+    }
+    .link-item:hover {
+      background: var(--item-hover);
+      transform: translateY(-1px);
+    }
+    .link-item:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 3px;
+    }
+    .link-icon {
+      width: 22px;
+      height: 22px;
+      flex: 0 0 22px;
+      opacity: 0.9;
+    }
+    footer {
+      text-align: center;
+      padding: 1rem;
+      opacity: 0.8;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Support Magic Squad</h1>
+    <p>Your resources</p>
+  </header>
+
+  <div class="links-container">
+    <!-- SNOW Tickets -->
+    <a class="link-item" href="https://dell.service-now.com/now/nav/ui/classic/params/target/sc_task_list.do%3Fsysparm_userpref_module%3De4aba1281358fa0074f3dbf18144b0c1%26sysparm_query%3Dactive%3Dtrue%5Eassigned_toDYNAMIC90d1921e5f510100a9ad2572f2b477fe%5EORassignment_groupDYNAMICd6435e965f510100a9svg class="link-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M14 3h7v7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M21 14v5a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>SNOW Tickets</span>
+    </a>
+
+    <!-- My SNOW Requests -->
+    <a class="link-item" href="https://dell.service-now.com/esc?idss="link-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M14 3h7v7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M21 14v5a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>My SNOW Requests</span>
+    </a>
+
+    <!-- DDS Contact Form -->
+    <a class="link-item" href="https://dell.service-now.com/esc?id=sc_cat_item&amp;table=sc_cat_item&amp;sys_id=bdcedc1f4709f6d0e9bcb5ea216d439b&amp;searchTerm=dell%20design%20system%20contact%20form" target="_blank" rel="noopener noreferrerdden="true">
+        <path d="M14 3h7v7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M21 14v5a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>DDS Contact Form</span>
+    </a>
+  </div>
+
+  <footer>
+    © <span id="year"></span> Support Magic Squad
+  </footer>
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
