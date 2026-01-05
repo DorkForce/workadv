@@ -2,78 +2,235 @@
 <!doctype html>
 <html>
   <meta charset="utf-8">
-  <title>Sticky Notes Bridge</title>
+  <title>Sticky Notes Cloud Bridge</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:#0f172a; color:#e5e7eb; }
-    .btn { background:#1f2937; color:#e5e7eb; border:1px solid #374151; border-radius:8px; padding:.5rem .75rem; cursor:pointer; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:#0f172a; color:#e5e7eb; margin:0; padding:16px; }
     .row { margin: .5rem 0; }
+    .btn { background:#1f2937; color:#e5e7eb; border:1px solid #374151; border-radius:8px; padding:.5rem .75rem; cursor:pointer; }
+    input, select { background:#111827; color:#e5e7eb; border:1px solid #374151; border-radius:8px; padding:.4rem .5rem; width:100%; }
+    label { display:block; margin-bottom:6px; color:#9ca3af; }
     small { color:#9ca3af; }
     code { background:#111827; padding:0 .25rem; border-radius:4px; }
+    .status { margin-top:.5rem; }
+    .ok { color:#34d399; }
+    .warn { color:#fbbf24; }
+    .err { color:#f87171; }
+    .grid { display:grid; gap:10px; grid-template-columns: 1fr 1fr; }
+    .card { border:1px solid #1f2937; background:#0b1220; border-radius:10px; padding:12px; }
   </style>
   <body>
-    <h1>Sticky Notes Bridge</h1>
-    <p>This page provides shared storage for the Sticky Notes bookmarklet via <code>postMessage</code>.</p>
+    <h1>Sticky Notes Cloud Bridge</h1>
+    <p>This page acts as a secure cloud storage bridge for the Sticky Notes bookmarklet via <code>postMessage</code> and GitHub Gists.</p>
 
-    <div class="row">
-      <button id="req" class="btn" type="button">Enable shared storage</button>
-      <small>Uses <code>document.requestStorageAccess()</code> if available.</small>
+    <div class="grid">
+      <div class="card">
+        <h2>Setup</h2>
+        <div class="row">
+          <label for="pat">GitHub PAT (fine‑grained, scope: Gist)</label>
+          <input id="pat" type="password" placeholder="ghp_xxx or fine-grained token"/>
+          <small>Only stored in this origin’s localStorage.</small>
+        </div>
+
+        <div class="row">
+          <label for="gistId">Gist ID (optional if creating new)</label>
+          <input id="gistId" type="text" placeholder="e.g. 0123abcd..."/>
+        </div>
+
+        <div class="row">
+          <button class="btn" id="createGist">Create private Gist</button>
+          <small>Creates a new private gist with <code>sticky-notes.json</code> initialized to <code>[]</code>.</small>
+        </div>
+
+        <div class="row">
+          <button class="btn" id="connect">Save & Connect</button>
+        </div>
+
+        <div id="setupStatus" class="status">Status: Not connected</div>
+      </div>
+
+      <div class="card">
+        <h2>Storage Access</h2>
+        <div class="row">
+          <button class="btn" id="reqAccess">Enable shared storage</button>
+          <small>Uses <code>document.requestStorageAccess()</code> if available for third‑party iframes.</small>
+        </div>
+        <div id="accessStatus" class="status">Storage Access: Unknown</div>
+
+        <h2>Diagnostics</h2>
+        <div class="row">
+          <button class="btn" id="probe">Probe bridge</button>
+          <div id="probeStatus" class="status">Probe: Unknown</div>
+        </div>
+      </div>
     </div>
-    <div class="row"><span id="status">Status: Initializing…</span></div>
 
     <script>
       (function(){
-        const STATUS = document.getElementById('status');
-        function setStatus(text, color) { STATUS.textContent = "Status: " + text; STATUS.style.color = color || '#e5e7eb'; }
-        function pingParent(type, payload) { try { top.postMessage({ type, payload }, "*"); } catch(e) {} }
+        const LS_TOKEN = "__sn_cloud_token__";
+        const LS_GIST  = "__sn_cloud_gist_id__";
+        const FILE_NAME = "sticky-notes.json";
 
-        // Storage helpers
-        function safeGet(key) { try { return JSON.parse(localStorage.getItem(key) || "[]"); } catch { return []; } }
-        function safeSet(key, payload) { try { localStorage.setItem(key, JSON.stringify(payload || [])); return true; } catch { return false; } }
+        const patInp = document.getElementById("pat");
+        const gistInp = document.getElementById("gistId");
+        const setupStatus = document.getElementById("setupStatus");
+        const accessStatus = document.getElementById("accessStatus");
+        const probeStatus = document.getElementById("probeStatus");
 
-        // Button to request storage access (requires user gesture)
-        async function requestAccess() {
+        // Load saved values
+        try {
+          const t = localStorage.getItem(LS_TOKEN); if (t) patInp.value = t;
+          const g = localStorage.getItem(LS_GIST);  if (g) gistInp.value = g;
+          setSetupStatus();
+        } catch {}
+
+        function ok(el, text) { el.textContent = text; el.className = "status ok"; }
+        function warn(el, text) { el.textContent = text; el.className = "status warn"; }
+        function err(el, text) { el.textContent = text; el.className = "status err"; }
+
+        function setSetupStatus(){
+          const t = localStorage.getItem(LS_TOKEN);
+          const g = localStorage.getItem(LS_GIST);
+          if (t && g) ok(setupStatus, "Status: Connected (token & gistId present)");
+          else if (t) warn(setupStatus, "Status: Token present; gistId missing");
+          else warn(setupStatus, "Status: Not connected");
+        }
+
+        async function requestAccess(){
           if (document.requestStorageAccess) {
             try {
               await document.requestStorageAccess();
-              // Set a test cookie & localStorage key to verify
               document.cookie = "snbridge=granted; path=/; max-age=31536000; SameSite=None; Secure";
               localStorage.setItem("__sn_bridge_access__", "granted");
-              setStatus("Storage access granted", "#34d399");
-              pingParent("sn_access_granted", { ok: true });
+              ok(accessStatus, "Storage access granted");
+              top.postMessage({ type: "sn_access_granted", payload: { ok:true } }, "*");
             } catch (e) {
-              setStatus("Storage access denied: " + e.message, "#f87171");
-              pingParent("sn_access_granted", { ok: false, error: e.message });
+              err(accessStatus, "Storage access denied: " + e.message);
+              top.postMessage({ type: "sn_access_granted", payload: { ok:false, error:e.message } }, "*");
             }
           } else {
-            setStatus("Storage Access API not available (fallback to partitioned storage)", "#fbbf24");
-            pingParent("sn_access_granted", { ok: false, error: "API not available" });
+            warn(accessStatus, "Storage Access API not available; relying on partitioned behavior");
+            top.postMessage({ type: "sn_access_granted", payload: { ok:false, error:"API not available" } }, "*");
           }
         }
 
-        document.getElementById('req').addEventListener('click', requestAccess);
+        async function api(endpoint, method = "GET", body = null) {
+          const token = localStorage.getItem(LS_TOKEN);
+          if (!token) throw new Error("Missing PAT");
+          const headers = {
+            "Authorization": "Bearer " + token,
+            "Accept": "application/vnd.github+json"
+          };
+          const res = await fetch("https://api.github.com" + endpoint, {
+            method, headers,
+            body: body ? JSON.stringify(body) : null
+          });
+          if (!res.ok) {
+            const tx = await res.text().catch(()=> "");
+            throw new Error("GitHub API error " + res.status + ": " + tx);
+          }
+          return res.json();
+        }
 
-        // Message handling from bookmarklet
-        window.addEventListener("message", (ev) => {
+        async function createGist() {
+          try {
+            const token = patInp.value.trim();
+            if (!token) { err(setupStatus, "PAT required"); return; }
+            localStorage.setItem(LS_TOKEN, token);
+            const body = {
+              description: "Sticky Notes Cloud (bookmarklet)",
+              public: false,
+              files: { [FILE_NAME]: { content: "[]" } }
+            };
+            const data = await api("/gists", "POST", body);
+            const id = data.id;
+            gistInp.value = id;
+            localStorage.setItem(LS_GIST, id);
+            ok(setupStatus, "Created private gist: " + id);
+          } catch (e) {
+            err(setupStatus, "Create gist failed: " + e.message);
+          }
+        }
+
+        function saveConnect(){
+          const token = patInp.value.trim();
+          const gid = gistInp.value.trim();
+          if (!token) { err(setupStatus, "PAT required"); return; }
+          if (!gid)   { err(setupStatus, "Gist ID required"); return; }
+          localStorage.setItem(LS_TOKEN, token);
+          localStorage.setItem(LS_GIST, gid);
+          ok(setupStatus, "Status: Connected (token & gistId saved)");
+          top.postMessage({ type:"sn_ready" }, "*");
+        }
+
+        async function getNotesFromGist() {
+          const gid = localStorage.getItem(LS_GIST);
+          if (!gid) throw new Error("Missing gistId");
+          const data = await api("/gists/" + gid, "GET");
+          const files = data.files || {};
+          const file = files[FILE_NAME];
+          if (!file || !file.content) return [];
+          try { return JSON.parse(file.content) || []; }
+          catch { return []; }
+        }
+
+        async function setNotesToGist(payload, merge) {
+          const gid = localStorage.getItem(LS_GIST);
+          if (!gid) throw new Error("Missing gistId");
+          let content = JSON.stringify(Array.isArray(payload) ? payload : [], null, 2);
+
+          if (merge) {
+            const existing = await getNotesFromGist();
+            const byId = new Map(existing.map(n => [n.id, n]));
+            for (const n of (Array.isArray(payload) ? payload : [])) byId.set(n.id, n);
+            content = JSON.stringify(Array.from(byId.values()), null, 2);
+          }
+
+          await api("/gists/" + gid, "PATCH", { files: { [FILE_NAME]: { content } } });
+          return true;
+        }
+
+        // Messaging
+        window.addEventListener("message", async (ev) => {
           const d = ev.data || {};
-          if (d.type === "sn_ping") {
-            setStatus("Ready (handshake ok)", "#34d399");
-            pingParent("sn_ready", { ok: true });
-          } else if (d.type === "sn_get") {
-            const data = safeGet(d.key);
-            pingParent("sn_get_ok", { payload: data });
-          } else if (d.type === "sn_set") {
-            const ok = safeSet(d.key, d.payload);
-            pingParent("sn_set_ok", { ok });
-          } else if (d.type === "sn_probe") {
-            // Probe read/write capability
-            const cookie = document.cookie || "";
-            const ls = localStorage.getItem("__sn_bridge_access__");
-            pingParent("sn_probe_ok", { cookiePresent: /snbridge=/.test(cookie), lsAccess: !!ls });
+          try {
+            if (d.type === "sn_ping") {
+              top.postMessage({ type:"sn_ready" }, "*");
+            } else if (d.type === "sn_probe") {
+              const cookie = document.cookie || "";
+              const lsToken = !!localStorage.getItem(LS_TOKEN);
+              top.postMessage({ type:"sn_probe_ok", payload: { cookiePresent:/snbridge=/.test(cookie), lsAccess: lsToken } }, "*");
+            } else if (d.type === "sn_cloud_get") {
+              const arr = await getNotesFromGist();
+              top.postMessage({ type:"sn_cloud_get_ok", payload: arr }, "*");
+            } else if (d.type === "sn_cloud_set") {
+              await setNotesToGist(d.payload || [], !!d.merge);
+              top.postMessage({ type:"sn_cloud_set_ok", ok:true }, "*");
+            } else if (d.type === "sn_get") {
+              // Back-compat (local-only); return empty if not using local bridging.
+              top.postMessage({ type:"sn_get_ok", payload: [] }, "*");
+            } else if (d.type === "sn_set") {
+              // Back-compat; acknowledge but do nothing.
+              top.postMessage({ type:"sn_set_ok", ok:true }, "*");
+            }
+          } catch (e) {
+            top.postMessage({ type:"sn_cloud_error", error: e.message }, "*");
           }
         });
 
-        // Announce ready if embedded directly
-        setTimeout(() => { setStatus("Ready (awaiting handshake)"); pingParent("sn_ready", { ok: true }); }, 0);
+        // Buttons
+        document.getElementById("createGist").addEventListener("click", createGist);
+        document.getElementById("connect").addEventListener("click", saveConnect);
+        document.getElementById("reqAccess").addEventListener("click", requestAccess);
+        document.getElementById("probe").addEventListener("click", function(){
+          const cookie = document.cookie || "";
+          const lsToken = !!localStorage.getItem(LS_TOKEN);
+          const lsGist  = !!localStorage.getItem(LS_GIST);
+          if (lsToken && lsGist) ok(probeStatus, "Probe: Token & Gist present. Cookie: " + ( /snbridge=/.test(cookie) ? "yes" : "no" ));
+          else warn(probeStatus, "Probe: Missing token or gist");
+        });
+
+        // Announce ready
+        setTimeout(() => top.postMessage({ type:"sn_ready" }, "*"), 0);
       })();
     </script>
   </body>
