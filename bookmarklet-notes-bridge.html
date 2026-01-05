@@ -33,7 +33,7 @@
 
         <div class="row">
           <label for="gistId">Gist ID</label>
-          <input id="gistId" type="text" placeholder="e.g. 0123abcd..."/>
+          <input id="gistId" type="text" placeholder="e.g. c08d33049be9993981d35e517150e6b4"/>
         </div>
 
         <div class="row">
@@ -234,11 +234,19 @@
               return;
             }
 
-            // OPTIONAL: status query
+            // NEW: status query
             if (d.type === "sn_status") {
               const lsToken = !!localStorage.getItem(LS_TOKEN);
               const lsGist  = !!localStorage.getItem(LS_GIST);
               top.postMessage({ type:"sn_status_ok", payload: { lsToken, lsGist } }, "*");
+              return;
+            }
+
+            // NEW: export config to any opener (for bootstrap)
+            if (d.type === "sn_export_config") {
+              const token = localStorage.getItem(LS_TOKEN) || "";
+              const gist  = localStorage.getItem(LS_GIST) || "";
+              top.postMessage({ type:"sn_export_config_ok", payload: { token, gist } }, "*");
               return;
             }
 
@@ -272,5 +280,6 @@
         setTimeout(() => top.postMessage({ type:"sn_ready" }, "*"), 0);
       })();
     </script>
+
   </body>
 </html>
