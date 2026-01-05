@@ -32,7 +32,7 @@
         </div>
 
         <div class="row">
-          <label for="gistId">Gist ID (optional if creating new)</label>
+          <label for="gistId">Gist ID</label>
           <input id="gistId" type="text" placeholder="e.g. 0123abcd..."/>
         </div>
 
@@ -83,9 +83,9 @@
           setSetupStatus();
         } catch {}
 
-        function ok(el, text) { el.textContent = text; el.className = "status ok"; }
+        function ok(el, text)   { el.textContent = text; el.className = "status ok"; }
         function warn(el, text) { el.textContent = text; el.className = "status warn"; }
-        function err(el, text) { el.textContent = text; el.className = "status err"; }
+        function err(el, text)  { el.textContent = text; el.className = "status err"; }
 
         function setSetupStatus(){
           const t = localStorage.getItem(LS_TOKEN);
@@ -193,24 +193,63 @@
         window.addEventListener("message", async (ev) => {
           const d = ev.data || {};
           try {
+            // Handshake
             if (d.type === "sn_ping") {
               top.postMessage({ type:"sn_ready" }, "*");
-            } else if (d.type === "sn_probe") {
+              return;
+            }
+
+            // Probe
+            if (d.type === "sn_probe") {
               const cookie = document.cookie || "";
               const lsToken = !!localStorage.getItem(LS_TOKEN);
-              top.postMessage({ type:"sn_probe_ok", payload: { cookiePresent:/snbridge=/.test(cookie), lsAccess: lsToken } }, "*");
-            } else if (d.type === "sn_cloud_get") {
+              const lsGist  = !!localStorage.getItem(LS_GIST);
+              top.postMessage({
+                type:"sn_probe_ok",
+                payload: { cookiePresent:/snbridge=/.test(cookie), lsAccess: lsToken && lsGist }
+              }, "*");
+              return;
+            }
+
+            // Cloud GET/SET
+            if (d.type === "sn_cloud_get") {
               const arr = await getNotesFromGist();
               top.postMessage({ type:"sn_cloud_get_ok", payload: arr }, "*");
-            } else if (d.type === "sn_cloud_set") {
+              return;
+            }
+            if (d.type === "sn_cloud_set") {
               await setNotesToGist(d.payload || [], !!d.merge);
               top.postMessage({ type:"sn_cloud_set_ok", ok:true }, "*");
-            } else if (d.type === "sn_get") {
-              // Back-compat (local-only); return empty if not using local bridging.
+              return;
+            }
+
+            // NEW: accept config sent from the bookmarklet (iframe context)
+            if (d.type === "sn_config") {
+              const token = (d.token || "").trim();
+              const gid   = (d.gistId || "").trim();
+              if (token) localStorage.setItem(LS_TOKEN, token);
+              if (gid)   localStorage.setItem(LS_GIST, gid);
+              setSetupStatus();
+              top.postMessage({ type:"sn_config_ok", ok: !!(token && gid) }, "*");
+              return;
+            }
+
+            // OPTIONAL: status query
+            if (d.type === "sn_status") {
+              const lsToken = !!localStorage.getItem(LS_TOKEN);
+              const lsGist  = !!localStorage.getItem(LS_GIST);
+              top.postMessage({ type:"sn_status_ok", payload: { lsToken, lsGist } }, "*");
+              return;
+            }
+
+            // Back-compat (local-only shim)
+            if (d.type === "sn_get") {
               top.postMessage({ type:"sn_get_ok", payload: [] }, "*");
-            } else if (d.type === "sn_set") {
-              // Back-compat; acknowledge but do nothing.
+              return;
+            }
+            if (d.type === "sn_set") {
               top.postMessage({ type:"sn_set_ok", ok:true }, "*");
+              return;
             }
           } catch (e) {
             top.postMessage({ type:"sn_cloud_error", error: e.message }, "*");
