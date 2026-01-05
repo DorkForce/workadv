@@ -1,0 +1,40 @@
+
+<!doctype html>
+<html>
+  <meta charset="utf-8">
+  <title>Sticky Notes Bridge</title>
+  <script>
+    // Respond to postMessage from bookmarklet
+    // NOTE: This page must be served over HTTPS; third-party storage may be blocked if 3P cookies/storage are disabled.
+    (function(){
+      function ok(type, payload) { top.postMessage({ type, payload }, "*"); }
+      window.addEventListener("message", (ev) => {
+        const msg = ev.data || {};
+        if (msg.type === "sn_ping") {
+          ok("sn_ready");
+        } else if (msg.type === "sn_get") {
+          try {
+            const data = JSON.parse(localStorage.getItem(msg.key) || "[]");
+            top.postMessage({ type: "sn_get_ok", payload: data }, "*");
+          } catch (e) {
+            top.postMessage({ type: "sn_get_ok", payload: [] }, "*");
+          }
+        } else if (msg.type === "sn_set") {
+          try {
+            localStorage.setItem(msg.key, JSON.stringify(msg.payload || []));
+            top.postMessage({ type: "sn_set_ok" }, "*");
+          } catch (e) {
+            top.postMessage({ type: "sn_set_ok" }, "*");
+          }
+        }
+      });
+      // Tell parent we're ready if embedded directly
+      setTimeout(() => ok("sn_ready"), 0);
+    })();
+  </script>
+  <body style="font-family: system-ui; margin: 2rem;">
+    <h1>Sticky Notes Bridge</h1>
+    <p>This page acts as a storage bridge for the Sticky Notes bookmarklet.</p>
+    <p>Keep it hosted, and set <code>BRIDGE_URL</code> in the bookmarklet to this page’s URL.</p>
+  </body>
+</html>
