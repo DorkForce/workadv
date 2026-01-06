@@ -80,177 +80,314 @@
   </button>
   <div id="sn-probe-status" aria-live="polite">Probe idle</div>
 
-  <script>
-    (function(){
-      const LS_TOKEN = "__sn_cloud_token__";
-      const LS_GIST  = "__sn_cloud_gist_id__";
-      const FILE_NAME = "sticky-notes.json";
-      const TARGET_FALLBACK = "*";
+  
+<script>
+  (function(){
+    const LS_TOKEN = "__sn_cloud_token__";
+    const LS_GIST  = "__sn_cloud_gist_id__";
+    const FILE_NAME = "sticky-notes.json";
+    const TARGET_FALLBACK = "*";
 
-      const patInp = document.getElementById("pat");
-      const gistInp = document.getElementById("gistId");
-      const setupStatus = document.getElementById("setupStatus");
-      const accessStatus = document.getElementById("accessStatus");
-      const probeStatus = document.getElementById("probeStatus");
-      const floatingProbeStatus = document.getElementById("sn-probe-status");
+    const patInp = document.getElementById("pat");
+    const gistInp = document.getElementById("gistId");
+    const setupStatus = document.getElementById("setupStatus");
+    const accessStatus = document.getElementById("accessStatus");
+    const probeStatus = document.getElementById("probeStatus");
+    const floatingProbeStatus = document.getElementById("sn-probe-status");
 
-      let lastSource = null;
-      let lastOrigin = TARGET_FALLBACK;
+    let lastSource = null;
+    let lastOrigin = TARGET_FALLBACK;
 
-      function ok(el, text){ el.textContent = text; el.className = "status ok"; }
-      function warn(el, text){ el.textContent = text; el.className = "status warn"; }
-      function err(el, text){ el.textContent = text; el.className = "status err"; }
-      function setFloatingStatus(text){ if(floatingProbeStatus) floatingProbeStatus.textContent = text; }
+    function ok(el, text){ el.textContent = text; el.className = "status ok"; }
+    function warn(el, text){ el.textContent = text; el.className = "status warn"; }
+    function err(el, text){ el.textContent = text; el.className = "status err"; }
+    function setFloatingStatus(text){ if(floatingProbeStatus) floatingProbeStatus.textContent = text; }
 
+    // --- Helpers to read current config and access signals ---
+    function getConfig(){
+      const token = (patInp.value || "").trim() || localStorage.getItem(LS_TOKEN) || "";
+      const gist  = (gistInp.value || "").trim() || localStorage.getItem(LS_GIST) || "";
+      return { token, gist };
+    }
+    function saveConfig(){
+      const token = (patInp.value || "").trim();
+      const gist  = (gistInp.value || "").trim();
+      if(!token || !gist){ setFloatingStatus("Enter PAT and Gist ID, then click Save"); return false; }
+      localStorage.setItem(LS_TOKEN, token);
+      localStorage.setItem(LS_GIST, gist);
+      return true;
+    }
+    function hasAccessCookie(){
+      return /(^|;\s*)snbridge=granted\b/.test(document.cookie || "");
+    }
+    function hasAccessLocalSignal(){
+      return localStorage.getItem("__sn_bridge_access__") === "granted";
+    }
+
+    // --- NEW: Auto-update UI sections ---
+    function updateSetupStatus(){
       try {
-        const t = localStorage.getItem(LS_TOKEN); if (t) patInp.value = t;
-        const g = localStorage.getItem(LS_GIST);  if (g) gistInp.value = g;
-        setSetupStatus();
-      } catch {}
-
-      function setSetupStatus(){
         const t = localStorage.getItem(LS_TOKEN);
         const g = localStorage.getItem(LS_GIST);
-        if (t && g) ok(setupStatus, "Status: Connected (token & gistId present)");
-        else if (t) warn(setupStatus, "Status: Token present; gistId missing");
-        else warn(setupStatus, "Status: Not connected");
-      }
-
-      function getConfig(){
-        const token = (patInp.value || "").trim() || localStorage.getItem(LS_TOKEN) || "";
-        const gist  = (gistInp.value || "").trim() || localStorage.getItem(LS_GIST) || "";
-        return { token, gist };
-      }
-
-      function saveConfig(){
-        const token = patInp.value.trim();
-        const gist  = gistInp.value.trim();
-        if(!token || !gist){ setFloatingStatus("Enter PAT and Gist ID, then click Save"); return false; }
-        localStorage.setItem(LS_TOKEN, token);
-        localStorage.setItem(LS_GIST, gist);
-        return true;
-      }
-
-      function postToSource(type, payload){
-        if (lastSource) {
-          try { lastSource.postMessage({ type, ...(payload?{payload}:{} ) }, lastOrigin || TARGET_FALLBACK); return true; }
-          catch(e){}
-        }
-        return false;
-      }
-      function postToParent(type, payload){
-        try { window.parent.postMessage({ type, ...(payload?{payload}:{} ) }, TARGET_FALLBACK); return true; } catch(e){ return false; }
-      }
-      function postToOpener(type, payload){
-        try {
-          if (window.opener && !window.opener.closed) {
-            window.opener.postMessage({ type, ...(payload?{payload}:{} ) }, TARGET_FALLBACK);
-            return true;
-          }
-        } catch(e){}
-        return false;
-      }
-
-      window.addEventListener("message", async (ev) => {
-        if (ev && ev.source) lastSource = ev.source;
-        lastOrigin = ev.origin || TARGET_FALLBACK;
-        const d = ev.data || {};
-        try {
-          if (d.type === "sn_ping") { postToParent("sn_ready"); return; }
-          if (d.type === "sn_export_config") {
-            const { token, gist } = getConfig();
-            if (!postToSource("sn_export_config_ok", { token, gist })) {
-              postToParent("sn_export_config_ok", { token, gist }) || postToOpener("sn_export_config_ok", { token, gist });
-            }
-            return;
-          }
-          if (d.type === "sn_status") {
-            const { token, gist } = getConfig();
-            postToSource("sn_status_ok", { lsToken:!!token, lsGist:!!gist }) || postToParent("sn_status_ok", { lsToken:!!token, lsGist:!!gist });
-            return;
-          }
-          if (d.type === "sn_config") {
-            const okSave = saveConfig();
-            postToSource("sn_config_ok", { ok: okSave }) || postToParent("sn_config_ok", { ok: okSave });
-            return;
-          }
-        } catch(e){}
-      });
-
-      document.getElementById("createGist").addEventListener("click", async function(){
-        try {
-          const token = (patInp.value || "").trim();
-          if (!token) { err(setupStatus, "PAT required"); return; }
-          localStorage.setItem(LS_TOKEN, token);
-          const body = { description: "Sticky Notes Cloud (bookmarklet)", public: false, files: { [FILE_NAME]: { content: "[]" } } };
-          const res = await fetch("https://api.github.com/gists", {
-            method:"POST",
-            headers:{ "Authorization":"Bearer "+token, "Accept":"application/vnd.github+json" },
-            body: JSON.stringify(body)
-          });
-          const data = await res.json();
-          gistInp.value = data.id;
-          localStorage.setItem(LS_GIST, data.id);
-          ok(setupStatus, "Created private gist: " + data.id);
-        } catch(e){ err(setupStatus, "Create gist failed: " + e.message); }
-      });
-
-      document.getElementById("connect").addEventListener("click", function(){
-        const okSave = saveConfig();
-        if(!okSave) return;
-        ok(setupStatus, "Status: Connected (token & gistId saved)");
-        setFloatingStatus("Config saved to localStorage");
-        const { token, gist } = getConfig();
-        if (postToSource("sn_export_config_ok", { token, gist })) {
-          setFloatingStatus("Exported config to overlay");
-        } else if (postToOpener("sn_export_config_ok", { token, gist })) {
-          setFloatingStatus("Exported config to opener");
+        if (t && g) {
+          ok(setupStatus, "Status: Connected (token & gistId present)");
+        } else if (t) {
+          warn(setupStatus, "Status: Token present; gistId missing");
         } else {
-          setFloatingStatus("Waiting for overlay poll… keep this tab open");
+          warn(setupStatus, "Status: Not connected");
         }
-        postToParent("sn_config_ok", { ok:true });
-      });
+      } catch {
+        warn(setupStatus, "Status: Not connected");
+      }
+    }
+    function updateAccessStatus(){
+      const api = !!document.requestStorageAccess;
+      const cookieOk = hasAccessCookie();
+      const lsOk = hasAccessLocalSignal();
+      if (!api) {
+        warn(accessStatus, "Storage Access: API not available");
+      } else if (cookieOk || lsOk) {
+        ok(accessStatus, "Storage Access: Granted");
+      } else {
+        warn(accessStatus, "Storage Access: Not granted");
+      }
+    }
+    function updateProbeStatus(){
+      const { token, gist } = getConfig();
+      const cookieOk = hasAccessCookie();
+      if (token && gist) {
+        ok(probeStatus, "Probe: Token & Gist present. Cookie: " + (cookieOk ? "yes" : "no"));
+      } else {
+        warn(probeStatus, "Probe: Missing token or gist. Cookie: " + (cookieOk ? "yes" : "no"));
+      }
+    }
 
-      document.getElementById("reqAccess").addEventListener("click", async function(){
-        if (document.requestStorageAccess) {
+    // Initialize input values from localStorage and update UI immediately
+    try {
+      const t = localStorage.getItem(LS_TOKEN); if (t) patInp.value = t;
+      const g = localStorage.getItem(LS_GIST);  if (g) gistInp.value = g;
+    } catch {}
+    updateSetupStatus();
+    updateAccessStatus();
+    updateProbeStatus();
+
+    // PostMessage utilities
+    function postToSource(type, payload){
+      if (lastSource) {
+        try { lastSource.postMessage({ type, ...(payload?{payload}:{} ) }, lastOrigin || TARGET_FALLBACK); return true; }
+        catch(e){}
+      }
+      return false;
+    }
+    function postToParent(type, payload){
+      try { window.parent.postMessage({ type, ...(payload?{payload}:{} ) }, TARGET_FALLBACK); return true; } catch(e){ return false; }
+    }
+    function postToOpener(type, payload){
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage({ type, ...(payload?{payload}:{} ) }, TARGET_FALLBACK);
+          return true;
+        }
+      } catch(e){}
+      return false;
+    }
+
+    // Cloud I/O to GitHub Gist
+    async function readNotes(token, gistId){
+      const res = await fetch("https://api.github.com/gists/" + encodeURIComponent(gistId), {
+        headers: { "Authorization":"Bearer "+token, "Accept":"application/vnd.github+json" }
+      });
+      if (!res.ok) throw new Error("GitHub GET failed: " + res.status);
+      const data = await res.json();
+      const file = data.files && data.files[FILE_NAME];
+      if (!file) throw new Error(FILE_NAME + " not found in gist");
+      let content = file.content || "[]";
+      if (file.truncated && file.raw_url) {
+        const raw = await fetch(file.raw_url, { headers: { "Authorization":"Bearer "+token } });
+        if (!raw.ok) throw new Error("Raw file fetch failed: " + raw.status);
+        content = await raw.text();
+      }
+      const arr = JSON.parse(content || "[]");
+      if (!Array.isArray(arr)) throw new Error("Gist content is not an array");
+      return arr;
+    }
+    async function writeNotes(token, gistId, notes){
+      const body = { files: { [FILE_NAME]: { content: JSON.stringify(notes, null, 2) } } };
+      const res = await fetch("https://api.github.com/gists/" + encodeURIComponent(gistId), {
+        method:"PATCH",
+        headers:{ "Authorization":"Bearer "+token, "Accept":"application/vnd.github+json" },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error("GitHub PATCH failed: " + res.status);
+      return true;
+    }
+
+    // Message handling
+    window.addEventListener("message", async (ev) => {
+      if (ev && ev.source) lastSource = ev.source;
+      lastOrigin = ev.origin || TARGET_FALLBACK;
+      const d = ev.data || {};
+      try {
+        if (d.type === "sn_ping") { postToParent("sn_ready"); return; }
+
+        if (d.type === "sn_export_config") {
+          const { token, gist } = getConfig();
+          updateSetupStatus(); // reflect current state
+          if (!postToSource("sn_export_config_ok", { token, gist })) {
+            postToParent("sn_export_config_ok", { token, gist }) || postToOpener("sn_export_config_ok", { token, gist });
+          }
+          return;
+        }
+
+        if (d.type === "sn_status") {
+          const { token, gist } = getConfig();
+          updateSetupStatus();
+          postToSource("sn_status_ok", { lsToken:!!token, lsGist:!!gist }) || postToParent("sn_status_ok", { lsToken:!!token, lsGist:!!gist });
+          return;
+        }
+
+        if (d.type === "sn_config") {
+          const okSave = saveConfig();
+          updateSetupStatus();
+          postToSource("sn_config_ok", { ok: okSave }) || postToParent("sn_config_ok", { ok: okSave });
+          return;
+        }
+
+        if (d.type === "sn_cloud_get") {
           try {
-            await document.requestStorageAccess();
-            document.cookie = "snbridge=granted; path=/; max-age=31536000; SameSite=None; Secure";
-            localStorage.setItem("__sn_bridge_access__", "granted");
-            ok(accessStatus, "Storage access granted");
-            postToParent("sn_access_granted", { ok:true });
+            const { token, gist } = getConfig();
+            if (!token || !gist) throw new Error("Missing PAT or Gist ID");
+            const arr = await readNotes(token, gist);
+            if (!postToSource("sn_cloud_get_ok", arr)) {
+              postToParent("sn_cloud_get_ok", arr) || postToOpener("sn_cloud_get_ok", arr);
+            }
           } catch(e){
-            err(accessStatus, "Storage access denied: " + e.message);
-            postToParent("sn_access_granted", { ok:false, error:e.message });
+            const payload = { error: e.message };
+            postToSource("sn_cloud_error", payload) || postToParent("sn_cloud_error", payload) || postToOpener("sn_cloud_error", payload);
           }
-        } else {
-          warn(accessStatus, "Storage Access API not available");
-          postToParent("sn_access_granted", { ok:false, error:"API not available" });
+          return;
         }
-      });
 
-      document.getElementById("probe").addEventListener("click", function(){
-        const cookie = document.cookie || "";
-        const lsToken = !!localStorage.getItem(LS_TOKEN);
-        const lsGist  = !!localStorage.getItem(LS_GIST);
-        if (lsToken && lsGist) ok(probeStatus, "Probe: Token & Gist present. Cookie: " + (/snbridge=/.test(cookie) ? "yes" : "no"));
-        else warn(probeStatus, "Probe: Missing token or gist");
-      });
-
-      document.getElementById("sn-probe-btn").addEventListener("click", function(){
-        const { token, gist } = getConfig();
-        if(!token || !gist){ setFloatingStatus("Missing PAT or Gist; fill and Save first"); return; }
-        if (postToSource("sn_export_config_ok", { token, gist })) {
-          setFloatingStatus("Exported config to overlay");
-        } else if (postToOpener("sn_export_config_ok", { token, gist })) {
-          setFloatingStatus("Exported config to opener");
-        } else {
-          setFloatingStatus("Waiting for overlay poll… keep this tab open");
+        if (d.type === "sn_cloud_set") {
+          try {
+            const { token, gist } = getConfig();
+            if (!token || !gist) throw new Error("Missing PAT or Gist ID");
+            const incoming = Array.isArray(d.payload) ? d.payload : [];
+            let finalNotes = incoming;
+            if (d.merge) {
+              const current = await readNotes(token, gist);
+              const map = new Map();
+              for (const n of current) map.set(n.id, n);
+              for (const n of incoming) map.set(n.id, n);
+              finalNotes = Array.from(map.values());
+            }
+            await writeNotes(token, gist, finalNotes);
+            postToSource("sn_cloud_set_ok", { ok:true }) || postToParent("sn_cloud_set_ok", { ok:true }) || postToOpener("sn_cloud_set_ok", { ok:true });
+          } catch(e){
+            const payload = { error: e.message };
+            postToSource("sn_cloud_error", payload) || postToParent("sn_cloud_error", payload) || postToOpener("sn_cloud_error", payload);
+          }
+          return;
         }
-      });
 
-      setTimeout(() => { postToParent("sn_ready"); }, 0);
-    })();
-  </script>
+        if (d.type === "sn_probe") {
+          updateProbeStatus();
+          const { token, gist } = getConfig();
+          const info = { lsToken: !!token, lsGist: !!gist, hasCookie: hasAccessCookie() };
+          postToSource("sn_probe_ok", info) || postToParent("sn_probe_ok", info);
+        }
+      } catch(e){}
+    });
+
+    // Create private gist
+    document.getElementById("createGist").addEventListener("click", async function(){
+      try {
+        const token = (patInp.value || "").trim();
+        if (!token) { err(setupStatus, "PAT required"); return; }
+        localStorage.setItem(LS_TOKEN, token);
+        const body = { description: "Sticky Notes Cloud (bookmarklet)", public: false, files: { [FILE_NAME]: { content: "[]" } } };
+        const res = await fetch("https://api.github.com/gists", {
+          method:"POST",
+          headers:{ "Authorization":"Bearer "+token, "Accept":"application/vnd.github+json" },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error((data && data.message) ? data.message : ("HTTP "+res.status));
+        }
+        if (!data || !data.id) throw new Error("Unexpected response: missing gist id");
+        gistInp.value = data.id;
+        localStorage.setItem(LS_GIST, data.id);
+        ok(setupStatus, "Created private gist: " + data.id);
+        updateSetupStatus();   // reflect new state
+        updateProbeStatus();   // reflect new probe info
+      } catch(e){ err(setupStatus, "Create gist failed: " + e.message); }
+    });
+
+    // Save & Connect
+    document.getElementById("connect").addEventListener("click", function(){
+      const okSave = saveConfig();
+      if(!okSave) return;
+      ok(setupStatus, "Status: Connected (token & gistId saved)");
+      setFloatingStatus("Config saved to localStorage");
+      updateSetupStatus();
+      updateProbeStatus();
+      const { token, gist } = getConfig();
+      if (postToSource("sn_export_config_ok", { token, gist })) {
+        setFloatingStatus("Exported config to overlay");
+      } else if (postToOpener("sn_export_config_ok", { token, gist })) {
+        setFloatingStatus("Exported config to opener");
+      } else {
+        setFloatingStatus("Waiting for overlay poll… keep this tab open");
+      }
+      postToParent("sn_config_ok", { ok:true });
+    });
+
+    // Storage Access
+    document.getElementById("reqAccess").addEventListener("click", async function(){
+      if (document.requestStorageAccess) {
+        try {
+          await document.requestStorageAccess();
+          document.cookie = "snbridge=granted; path=/; max-age=31536000; SameSite=None; Secure";
+          localStorage.setItem("__sn_bridge_access__", "granted");
+          ok(accessStatus, "Storage access granted");
+          updateAccessStatus(); // reflect state
+          postToParent("sn_access_granted", { ok:true });
+        } catch(e){
+          err(accessStatus, "Storage access denied: " + e.message);
+          updateAccessStatus();
+          postToParent("sn_access_granted", { ok:false, error:e.message });
+        }
+      } else {
+        warn(accessStatus, "Storage Access API not available");
+        updateAccessStatus();
+        postToParent("sn_access_granted", { ok:false, error:"API not available" });
+      }
+    });
+
+    // Manual Probe button
+    document.getElementById("probe").addEventListener("click", function(){
+      updateProbeStatus();
+    });
+
+    // Floating Probe button (export config)
+    document.getElementById("sn-probe-btn").addEventListener("click", function(){
+      const { token, gist } = getConfig();
+      if(!token || !gist){ setFloatingStatus("Missing PAT or Gist; fill and Save first"); return; }
+      if (postToSource("sn_export_config_ok", { token, gist })) {
+        setFloatingStatus("Exported config to overlay");
+      } else if (postToOpener("sn_export_config_ok", { token, gist })) {
+        setFloatingStatus("Exported config to opener");
+      } else {
+        setFloatingStatus("Waiting for overlay poll… keep this tab open");
+      }
+    });
+
+    // Announce readiness
+    setTimeout(() => { postToParent("sn_ready"); }, 0);
+  })();
+
+</script>
+
 </body>
 </html>
