@@ -17,6 +17,18 @@
     .err { color:#f87171; }
     .grid { display:grid; gap:10px; grid-template-columns: 1fr 1fr; }
     .card { border:1px solid #1f2937; background:#0b1220; border-radius:10px; padding:12px; }
+    #sn-probe-btn {
+      position: fixed; right: 12px; bottom: 12px; z-index: 999999;
+      padding: 8px 10px; border-radius: 8px; border: 1px solid #374151;
+      background: #0f172a; color: #e5e7eb; font: 12px/1.2 system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      box-shadow: 0 6px 20px rgba(0,0,0,.35); cursor: pointer;
+    }
+    #sn-probe-btn:hover { filter: brightness(1.05); }
+    #sn-probe-status {
+      position: fixed; right: 12px; bottom: 52px; z-index: 999999;
+      padding: 6px 9px; border-radius: 8px; border: 1px solid #374151;
+      background: #0b1220; color: #9ca3af; font: 12px/1.2 system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
   </style>
   <body>
     <h1>Sticky Notes Cloud Bridge</h1>
@@ -42,7 +54,7 @@
         </div>
 
         <div class="row">
-          <button class="btn" id="connect">Save & Connect</button>
+          <button class="btn" id="connect">Save &amp; Connect</button>
         </div>
 
         <div id="setupStatus" class="status">Status: Not connected</div>
@@ -64,17 +76,30 @@
       </div>
     </div>
 
+    <!-- Floating Probe button -->
+    <button id="sn-probe-btn" type="button" title="Send exported config to opener">
+      Probe (send PAT+Gist)
+    </button>
+    <div id="sn-probe-status" aria-live="polite">Probe idle</div>
+
     <script>
       (function(){
         const LS_TOKEN = "__sn_cloud_token__";
         const LS_GIST  = "__sn_cloud_gist_id__";
         const FILE_NAME = "sticky-notes.json";
+        const TARGET = "*";
 
         const patInp = document.getElementById("pat");
         const gistInp = document.getElementById("gistId");
         const setupStatus = document.getElementById("setupStatus");
         const accessStatus = document.getElementById("accessStatus");
         const probeStatus = document.getElementById("probeStatus");
+        const floatingProbeStatus = document.getElementById("sn-probe-status");
+
+        function ok(el, text)   { el.textContent = text; el.className = "status ok"; }
+        function warn(el, text) { el.textContent = text; el.className = "status warn"; }
+        function err(el, text)  { el.textContent = text; el.className = "status err"; }
+        function setFloatingStatus(text){ if(floatingProbeStatus) floatingProbeStatus.textContent = text; }
 
         // Load saved values
         try {
@@ -82,10 +107,6 @@
           const g = localStorage.getItem(LS_GIST);  if (g) gistInp.value = g;
           setSetupStatus();
         } catch {}
-
-        function ok(el, text)   { el.textContent = text; el.className = "status ok"; }
-        function warn(el, text) { el.textContent = text; el.className = "status warn"; }
-        function err(el, text)  { el.textContent = text; el.className = "status err"; }
 
         function setSetupStatus(){
           const t = localStorage.getItem(LS_TOKEN);
@@ -95,179 +116,55 @@
           else warn(setupStatus, "Status: Not connected");
         }
 
-        async function requestAccess(){
-          if (document.requestStorageAccess) {
-            try {
-              await document.requestStorageAccess();
-              document.cookie = "snbridge=granted; path=/; max-age=31536000; SameSite=None; Secure";
-              localStorage.setItem("__sn_bridge_access__", "granted");
-              ok(accessStatus, "Storage access granted");
-              top.postMessage({ type: "sn_access_granted", payload: { ok:true } }, "*");
-            } catch (e) {
-              err(accessStatus, "Storage access denied: " + e.message);
-              top.postMessage({ type: "sn_access_granted", payload: { ok:false, error:e.message } }, "*");
-            }
-          } else {
-            warn(accessStatus, "Storage Access API not available; relying on partitioned behavior");
-            top.postMessage({ type: "sn_access_granted", payload: { ok:false, error:"API not available" } }, "*");
-          }
+        function getConfig(){
+          const token = (patInp.value || "").trim() || localStorage.getItem(LS_TOKEN) || "";
+          const gist  = (gistInp.value || "").trim() || localStorage.getItem(LS_GIST) || "";
+          return { token, gist };
         }
 
-        async function api(endpoint, method = "GET", body = null) {
-          const token = localStorage.getItem(LS_TOKEN);
-          if (!token) throw new Error("Missing PAT");
-          const headers = {
-            "Authorization": "Bearer " + token,
-            "Accept": "application/vnd.github+json"
-          };
-          const res = await fetch("https://api.github.com" + endpoint, {
-            method, headers,
-            body: body ? JSON.stringify(body) : null
-          });
-          if (!res.ok) {
-            const tx = await res.text().catch(()=> "");
-            throw new Error("GitHub API error " + res.status + ": " + tx);
-          }
-          return res.json();
-        }
-
-        async function createGist() {
-          try {
-            const token = patInp.value.trim();
-            if (!token) { err(setupStatus, "PAT required"); return; }
-            localStorage.setItem(LS_TOKEN, token);
-            const body = {
-              description: "Sticky Notes Cloud (bookmarklet)",
-              public: false,
-              files: { [FILE_NAME]: { content: "[]" } }
-            };
-            const data = await api("/gists", "POST", body);
-            const id = data.id;
-            gistInp.value = id;
-            localStorage.setItem(LS_GIST, id);
-            ok(setupStatus, "Created private gist: " + id);
-          } catch (e) {
-            err(setupStatus, "Create gist failed: " + e.message);
-          }
-        }
-
-        function saveConnect(){
+        function saveConfig(){
           const token = patInp.value.trim();
-          const gid = gistInp.value.trim();
-          if (!token) { err(setupStatus, "PAT required"); return; }
-          if (!gid)   { err(setupStatus, "Gist ID required"); return; }
+          const gist  = gistInp.value.trim();
+          if(!token || !gist){ setFloatingStatus("Enter PAT and Gist ID, then click Save"); return false; }
           localStorage.setItem(LS_TOKEN, token);
-          localStorage.setItem(LS_GIST, gid);
-          ok(setupStatus, "Status: Connected (token & gistId saved)");
-          top.postMessage({ type:"sn_ready" }, "*");
-        }
-
-        async function getNotesFromGist() {
-          const gid = localStorage.getItem(LS_GIST);
-          if (!gid) throw new Error("Missing gistId");
-          const data = await api("/gists/" + gid, "GET");
-          const files = data.files || {};
-          const file = files[FILE_NAME];
-          if (!file || !file.content) return [];
-          try { return JSON.parse(file.content) || []; }
-          catch { return []; }
-        }
-
-        async function setNotesToGist(payload, merge) {
-          const gid = localStorage.getItem(LS_GIST);
-          if (!gid) throw new Error("Missing gistId");
-          let content = JSON.stringify(Array.isArray(payload) ? payload : [], null, 2);
-
-          if (merge) {
-            const existing = await getNotesFromGist();
-            const byId = new Map(existing.map(n => [n.id, n]));
-            for (const n of (Array.isArray(payload) ? payload : [])) byId.set(n.id, n);
-            content = JSON.stringify(Array.from(byId.values()), null, 2);
-          }
-
-          await api("/gists/" + gid, "PATCH", { files: { [FILE_NAME]: { content } } });
+          localStorage.setItem(LS_GIST, gist);
           return true;
         }
 
-        // Messaging
-        window.addEventListener("message", async (ev) => {
-          const d = ev.data || {};
-          try {
-            // Handshake
-            if (d.type === "sn_ping") {
-              top.postMessage({ type:"sn_ready" }, "*");
-              return;
-            }
+        function notifyIframe(ok){
+          try{ window.parent.postMessage({ type:"sn_config_ok", ok }, TARGET); }catch(e){}
+        }
 
-            // Probe
-            if (d.type === "sn_probe") {
-              const cookie = document.cookie || "";
-              const lsToken = !!localStorage.getItem(LS_TOKEN);
-              const lsGist  = !!localStorage.getItem(LS_GIST);
-              top.postMessage({
-                type:"sn_probe_ok",
-                payload: { cookiePresent:/snbridge=/.test(cookie), lsAccess: lsToken && lsGist }
-              }, "*");
-              return;
+        function notifyOpener(token,gist){
+          try{
+            if(window.opener && !window.opener.closed){
+              window.opener.postMessage({ type:"sn_export_config_ok", payload:{ token,gist } }, TARGET);
+              setFloatingStatus("Exported config to opener");
+            } else {
+              setFloatingStatus("No opener; open via 'Open bridge' in overlay");
             }
+          }catch(e){ setFloatingStatus("Failed posting to opener"); }
+        }
 
-            // Cloud GET/SET
-            if (d.type === "sn_cloud_get") {
-              const arr = await getNotesFromGist();
-              top.postMessage({ type:"sn_cloud_get_ok", payload: arr }, "*");
-              return;
-            }
-            if (d.type === "sn_cloud_set") {
-              await setNotesToGist(d.payload || [], !!d.merge);
-              top.postMessage({ type:"sn_cloud_set_ok", ok:true }, "*");
-              return;
-            }
-
-            // NEW: accept config sent from the bookmarklet (iframe context)
-            if (d.type === "sn_config") {
-              const token = (d.token || "").trim();
-              const gid   = (d.gistId || "").trim();
-              if (token) localStorage.setItem(LS_TOKEN, token);
-              if (gid)   localStorage.setItem(LS_GIST, gid);
-              setSetupStatus();
-              top.postMessage({ type:"sn_config_ok", ok: !!(token && gid) }, "*");
-              return;
-            }
-
-            // NEW: status query
-            if (d.type === "sn_status") {
-              const lsToken = !!localStorage.getItem(LS_TOKEN);
-              const lsGist  = !!localStorage.getItem(LS_GIST);
-              top.postMessage({ type:"sn_status_ok", payload: { lsToken, lsGist } }, "*");
-              return;
-            }
-
-            // NEW: export config to any opener (for bootstrap)
-            if (d.type === "sn_export_config") {
-              const token = localStorage.getItem(LS_TOKEN) || "";
-              const gist  = localStorage.getItem(LS_GIST) || "";
-              top.postMessage({ type:"sn_export_config_ok", payload: { token, gist } }, "*");
-              return;
-            }
-
-            // Back-compat (local-only shim)
-            if (d.type === "sn_get") {
-              top.postMessage({ type:"sn_get_ok", payload: [] }, "*");
-              return;
-            }
-            if (d.type === "sn_set") {
-              top.postMessage({ type:"sn_set_ok", ok:true }, "*");
-              return;
-            }
-          } catch (e) {
-            top.postMessage({ type:"sn_cloud_error", error: e.message }, "*");
-          }
+        // Save & Connect button
+        document.getElementById("connect").addEventListener("click", function(){
+          const okSave = saveConfig();
+          if(!okSave) return;
+          ok(setupStatus, "Status: Connected (token & gistId saved)");
+          setFloatingStatus("Config saved to localStorage");
+          const { token,gist } = getConfig();
+          notifyIframe(true);
+          notifyOpener(token,gist);
         });
 
-        // Buttons
-        document.getElementById("createGist").addEventListener("click", createGist);
-        document.getElementById("connect").addEventListener("click", saveConnect);
-        document.getElementById("reqAccess").addEventListener("click", requestAccess);
+        // Floating Probe button
+        document.getElementById("sn-probe-btn").addEventListener("click", function(){
+          const { token,gist } = getConfig();
+          if(!token || !gist){ setFloatingStatus("Missing PAT or Gist; fill and Save first"); return; }
+          notifyOpener(token,gist);
+        });
+
+        // Diagnostics probe
         document.getElementById("probe").addEventListener("click", function(){
           const cookie = document.cookie || "";
           const lsToken = !!localStorage.getItem(LS_TOKEN);
@@ -276,158 +173,46 @@
           else warn(probeStatus, "Probe: Missing token or gist");
         });
 
+        // Storage Access
+        document.getElementById("reqAccess").addEventListener("click", async function(){
+          if (document.requestStorageAccess) {
+            try {
+              await document.requestStorageAccess();
+              document.cookie = "snbridge=granted; path=/; max-age=31536000; SameSite=None; Secure";
+              localStorage.setItem("__sn_bridge_access__", "granted");
+              ok(accessStatus, "Storage access granted");
+              top.postMessage({ type: "sn_access_granted", payload: { ok:true } }, TARGET);
+            } catch (e) {
+              err(accessStatus, "Storage access denied: " + e.message);
+              top.postMessage({ type: "sn_access_granted", payload: { ok:false, error:e.message } }, TARGET);
+            }
+          } else {
+            warn(accessStatus, "Storage Access API not available; relying on partitioned behavior");
+            top.postMessage({ type: "sn_access_granted", payload: { ok:false, error:"API not available" } }, TARGET);
+          }
+        });
+
+        // Messaging for iframe/tab flows
+        window.addEventListener("message", function(ev){
+          const d = ev.data || {};
+          if(d.type === "sn_export_config"){
+            const { token,gist } = getConfig();
+            notifyOpener(token,gist);
+          }
+          else if(d.type === "sn_status"){
+            const { token,gist } = getConfig();
+            window.parent.postMessage({ type:"sn_status_ok", payload:{ lsToken:!!token, lsGist:!!gist } }, TARGET);
+            setFloatingStatus((token && gist) ? "Status: config present" : "Status: config missing");
+          }
+          else if(d.type === "sn_config"){
+            const okSave = saveConfig();
+            notifyIframe(okSave);
+          }
+        });
+
         // Announce ready
-        setTimeout(() => top.postMessage({ type:"sn_ready" }, "*"), 0);
+        setTimeout(() => window.parent.postMessage({ type:"sn_ready" }, TARGET), 0);
       })();
     </script>
-
-
-    
-<!-- Probe button + minimal styles -->
-<style>
-  #sn-probe-btn {
-    position: fixed;
-    right: 12px;
-    bottom: 12px;
-    z-index: 999999;
-    padding: 8px 10px;
-    border-radius: 8px;
-    border: 1px solid #374151;
-    background: #0f172a;
-    color: #e5e7eb;
-    font: 12px/1.2 system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-    box-shadow: 0 6px 20px rgba(0,0,0,.35);
-    cursor: pointer;
-  }
-  #sn-probe-btn:hover { filter: brightness(1.05); }
-  #sn-probe-status {
-    position: fixed;
-    right: 12px;
-    bottom: 52px;
-    z-index: 999999;
-    padding: 6px 9px;
-    border-radius: 8px;
-    border: 1px solid #374151;
-    background: #0b1220;
-    color: #9ca3af;
-    font: 12px/1.2 system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-  }
-</style>
-
-<button id="sn-probe-btn" type="button" title="Send exported config to opener">
-  Probe (send PAT+Gist)
-</button>
-<div id="sn-probe-status" aria-live="polite">Probe idle</div>
-
-<script>
-(function(){
-  const ORIGIN = location.origin; // Bridge origin (used by the opener to validate)
-
-  // ---- Helpers to get/set config from UI or localStorage ----
-  function getConfig() {
-    // If you already have inputs, wire their IDs here:
-    const tokenInput = document.querySelector('#token') || document.querySelector('[name="token"]');
-    const gistInput  = document.querySelector('#gist')  || document.querySelector('[name="gist"]');
-
-    const lsToken = localStorage.getItem('lsToken') || '';
-    const lsGist  = localStorage.getItem('lsGist')  || '';
-
-    const token = (tokenInput && tokenInput.value) ? tokenInput.value.trim() : lsToken.trim();
-    const gist  = (gistInput  && gistInput.value)  ? gistInput.value.trim()  : lsGist.trim();
-
-    return { token, gist };
-  }
-
-  function setConfig(token, gist) {
-    try {
-      localStorage.setItem('lsToken', token || '');
-      localStorage.setItem('lsGist', gist || '');
-      return true;
-    } catch (e) {
-      console.warn('[Bridge] setConfig failed', e);
-      return false;
-    }
-  }
-
-  function setProbeStatus(text) {
-    const s = document.getElementById('sn-probe-status');
-    if (s) s.textContent = text;
-  }
-
-  // ---- Emit: send current config to the opener (used by bookmarklet bootstrap) ----
-  function emitExportConfigOk() {
-    const { token, gist } = getConfig();
-    if (!token || !gist) {
-      setProbeStatus('Missing PAT or Gist; fill and Save first');
-      return;
-    }
-    try {
-      if (window.opener && !window.opener.closed) {
-        window.opener.postMessage({ type: 'sn_export_config_ok', payload: { token, gist } }, ORIGIN);
-        setProbeStatus('Exported config to opener');
-      } else {
-        setProbeStatus('No opener; open via “Open bridge” from the overlay');
-      }
-    } catch (e) {
-      console.warn('[Bridge] postMessage to opener failed', e);
-      setProbeStatus('Failed to post to opener');
-    }
-  }
-
-  // ---- Auto reply to bootstrap polling ----
-  function onMessage(ev) {
-    // Only accept messages from the site that opened this bridge (optional strict check)
-    // If you use multiple sites, you can relax this: if (ev.origin !== expectedOrigin) return;
-    const d = ev.data || {};
-
-    if (d.type === 'sn_export_config') {
-      // Opener is polling for config
-      emitExportConfigOk();
-    }
-    else if (d.type === 'sn_status') {
-      // Iframe flow: tell the overlay if we have saved config
-      const { token, gist } = getConfig();
-      const has = !!token && !!gist;
-      try {
-        // Reply to parent (iframe container)
-        window.parent.postMessage({ type: 'sn_status_ok', payload: { lsToken: token || '', lsGist: gist || '' } }, ORIGIN);
-        setProbeStatus(has ? 'Status: config present' : 'Status: config missing');
-      } catch (e) {
-        console.warn('[Bridge] sn_status reply failed', e);
-      }
-    }
-    else if (d.type === 'sn_config') {
-      // Overlay sends PAT/Gist to persist in the bridge (iframe flow)
-      const ok = setConfig(d.token || '', d.gistId || '');
-      try {
-        window.parent.postMessage({ type: 'sn_config_ok', ok }, ORIGIN);
-        setProbeStatus(ok ? 'Config saved' : 'Failed to save config');
-      } catch (e) {
-        console.warn('[Bridge] sn_config_ok post failed', e);
-      }
-    }
-    // (Optional) If you implement cloud get/set here, also handle:
-    // - d.type === 'sn_cloud_get'  → fetch from Gist and post {type:'sn_cloud_get_ok', payload:[...]}
-    // - d.type === 'sn_cloud_set'  → write to Gist and post {type:'sn_cloud_set_ok'}
-  }
-
-  // ---- Handshake when embedded as an iframe ----
-  function emitReady() {
-    try {
-      window.parent.postMessage({ type: 'sn_ready' }, ORIGIN);
-      setProbeStatus('Bridge ready (iframe handshake sent)');
-    } catch (e) {
-      // In tab context, parent === window; ignore
-    }
-  }
-
-  // Wire up UI + listeners
-  document.getElementById('sn-probe-btn').addEventListener('click', emitExportConfigOk);
-  window.addEventListener('message', onMessage);
-  // Announce ready for the iframe flow (safe no-op in tab)
-  emitReady();
-})();
-</script>
-
   </body>
 </html>
