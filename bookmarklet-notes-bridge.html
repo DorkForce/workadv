@@ -281,5 +281,153 @@
       })();
     </script>
 
+
+    
+<!-- Probe button + minimal styles -->
+<style>
+  #sn-probe-btn {
+    position: fixed;
+    right: 12px;
+    bottom: 12px;
+    z-index: 999999;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid #374151;
+    background: #0f172a;
+    color: #e5e7eb;
+    font: 12px/1.2 system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    box-shadow: 0 6px 20px rgba(0,0,0,.35);
+    cursor: pointer;
+  }
+  #sn-probe-btn:hover { filter: brightness(1.05); }
+  #sn-probe-status {
+    position: fixed;
+    right: 12px;
+    bottom: 52px;
+    z-index: 999999;
+    padding: 6px 9px;
+    border-radius: 8px;
+    border: 1px solid #374151;
+    background: #0b1220;
+    color: #9ca3af;
+    font: 12px/1.2 system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  }
+</style>
+
+<button id="sn-probe-btn" type="button" title="Send exported config to opener">
+  Probe (send PAT+Gist)
+</button>
+<div id="sn-probe-status" aria-live="polite">Probe idle</div>
+
+<script>
+(function(){
+  const ORIGIN = location.origin; // Bridge origin (used by the opener to validate)
+
+  // ---- Helpers to get/set config from UI or localStorage ----
+  function getConfig() {
+    // If you already have inputs, wire their IDs here:
+    const tokenInput = document.querySelector('#token') || document.querySelector('[name="token"]');
+    const gistInput  = document.querySelector('#gist')  || document.querySelector('[name="gist"]');
+
+    const lsToken = localStorage.getItem('lsToken') || '';
+    const lsGist  = localStorage.getItem('lsGist')  || '';
+
+    const token = (tokenInput && tokenInput.value) ? tokenInput.value.trim() : lsToken.trim();
+    const gist  = (gistInput  && gistInput.value)  ? gistInput.value.trim()  : lsGist.trim();
+
+    return { token, gist };
+  }
+
+  function setConfig(token, gist) {
+    try {
+      localStorage.setItem('lsToken', token || '');
+      localStorage.setItem('lsGist', gist || '');
+      return true;
+    } catch (e) {
+      console.warn('[Bridge] setConfig failed', e);
+      return false;
+    }
+  }
+
+  function setProbeStatus(text) {
+    const s = document.getElementById('sn-probe-status');
+    if (s) s.textContent = text;
+  }
+
+  // ---- Emit: send current config to the opener (used by bookmarklet bootstrap) ----
+  function emitExportConfigOk() {
+    const { token, gist } = getConfig();
+    if (!token || !gist) {
+      setProbeStatus('Missing PAT or Gist; fill and Save first');
+      return;
+    }
+    try {
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage({ type: 'sn_export_config_ok', payload: { token, gist } }, ORIGIN);
+        setProbeStatus('Exported config to opener');
+      } else {
+        setProbeStatus('No opener; open via “Open bridge” from the overlay');
+      }
+    } catch (e) {
+      console.warn('[Bridge] postMessage to opener failed', e);
+      setProbeStatus('Failed to post to opener');
+    }
+  }
+
+  // ---- Auto reply to bootstrap polling ----
+  function onMessage(ev) {
+    // Only accept messages from the site that opened this bridge (optional strict check)
+    // If you use multiple sites, you can relax this: if (ev.origin !== expectedOrigin) return;
+    const d = ev.data || {};
+
+    if (d.type === 'sn_export_config') {
+      // Opener is polling for config
+      emitExportConfigOk();
+    }
+    else if (d.type === 'sn_status') {
+      // Iframe flow: tell the overlay if we have saved config
+      const { token, gist } = getConfig();
+      const has = !!token && !!gist;
+      try {
+        // Reply to parent (iframe container)
+        window.parent.postMessage({ type: 'sn_status_ok', payload: { lsToken: token || '', lsGist: gist || '' } }, ORIGIN);
+        setProbeStatus(has ? 'Status: config present' : 'Status: config missing');
+      } catch (e) {
+        console.warn('[Bridge] sn_status reply failed', e);
+      }
+    }
+    else if (d.type === 'sn_config') {
+      // Overlay sends PAT/Gist to persist in the bridge (iframe flow)
+      const ok = setConfig(d.token || '', d.gistId || '');
+      try {
+        window.parent.postMessage({ type: 'sn_config_ok', ok }, ORIGIN);
+        setProbeStatus(ok ? 'Config saved' : 'Failed to save config');
+      } catch (e) {
+        console.warn('[Bridge] sn_config_ok post failed', e);
+      }
+    }
+    // (Optional) If you implement cloud get/set here, also handle:
+    // - d.type === 'sn_cloud_get'  → fetch from Gist and post {type:'sn_cloud_get_ok', payload:[...]}
+    // - d.type === 'sn_cloud_set'  → write to Gist and post {type:'sn_cloud_set_ok'}
+  }
+
+  // ---- Handshake when embedded as an iframe ----
+  function emitReady() {
+    try {
+      window.parent.postMessage({ type: 'sn_ready' }, ORIGIN);
+      setProbeStatus('Bridge ready (iframe handshake sent)');
+    } catch (e) {
+      // In tab context, parent === window; ignore
+    }
+  }
+
+  // Wire up UI + listeners
+  document.getElementById('sn-probe-btn').addEventListener('click', emitExportConfigOk);
+  window.addEventListener('message', onMessage);
+  // Announce ready for the iframe flow (safe no-op in tab)
+  emitReady();
+})();
+</script>
+
   </body>
 </html>
